@@ -2,14 +2,18 @@ package com.franchise.api.controller;
 
 import com.franchise.api.dto.request.BranchRequest;
 import com.franchise.api.dto.request.FranchiseRequest;
+import com.franchise.api.dto.response.BranchResponse;
 import com.franchise.api.dto.response.FranchiseResponse;
 import com.franchise.api.dto.response.TopProductResponse;
+import com.franchise.api.mapper.BranchMapper;
 import com.franchise.api.mapper.FranchiseMapper;
 import com.franchise.api.mapper.TopProductMapper;
 import com.franchise.application.usecase.branch.AddBranchToFranchiseUseCase;
 import com.franchise.application.usecase.franchise.CreateFranchiseUseCase;
 import com.franchise.application.usecase.franchise.UpdateFranchiseNameUseCase;
 import com.franchise.application.usecase.query.GetTopStockProductPerBranchUseCase;
+import com.franchise.domain.model.Branch;
+import com.franchise.domain.model.Franchise;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -59,11 +63,12 @@ public class FranchiseController {
 
     @PostMapping("/{id}/branches")
     @ResponseStatus(HttpStatus.CREATED)
-    public Mono<FranchiseResponse> addBranchToFranchise(@PathVariable String id,
-                                                        @Valid @RequestBody BranchRequest request) {
+    public Mono<BranchResponse> addBranchToFranchise(@PathVariable String id,
+                                                     @Valid @RequestBody BranchRequest request) {
         return addBranchToFranchiseUseCase.execute(
                 new AddBranchToFranchiseUseCase.AddBranchToFranchiseRequest(id, request.name())
-        ).map(FranchiseMapper::toResponse);
+        ).map(this::extractLastBranch)
+         .map(BranchMapper::toResponse);
     }
 
     @GetMapping("/{id}/top-stock")
@@ -71,5 +76,11 @@ public class FranchiseController {
         return getTopStockProductPerBranchUseCase.execute(
                 new GetTopStockProductPerBranchUseCase.GetTopStockProductPerBranchRequest(id)
         ).map(TopProductMapper::toResponse);
+    }
+
+    private Branch extractLastBranch(Franchise franchise) {
+        return franchise.getBranches().stream()
+                .reduce((first, second) -> second)
+                .orElseThrow(() -> new IllegalArgumentException("Branch not found"));
     }
 }

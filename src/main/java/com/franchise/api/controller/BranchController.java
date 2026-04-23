@@ -8,15 +8,12 @@ import com.franchise.api.mapper.BranchMapper;
 import com.franchise.api.mapper.ProductMapper;
 import com.franchise.application.usecase.branch.UpdateBranchNameUseCase;
 import com.franchise.application.usecase.product.AddProductToBranchUseCase;
+import com.franchise.domain.model.Branch;
+import com.franchise.domain.model.Franchise;
+import com.franchise.domain.model.Product;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.ResponseStatus;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
 
 @RestController
@@ -37,7 +34,8 @@ public class BranchController {
                                                  @Valid @RequestBody UpdateBranchNameRequest request) {
         return updateBranchNameUseCase.execute(
                 new UpdateBranchNameUseCase.UpdateBranchNameRequest(id, request.name())
-        ).map(franchise -> BranchMapper.toResponse(franchise, id));
+        ).map(franchise -> extractBranch(franchise, id))
+         .map(BranchMapper::toResponse);
     }
 
     @PostMapping("/{id}/products")
@@ -46,6 +44,26 @@ public class BranchController {
                                                     @Valid @RequestBody ProductRequest request) {
         return addProductToBranchUseCase.execute(
                 new AddProductToBranchUseCase.AddProductToBranchRequest(id, request.name(), request.stock())
-        ).map(franchise -> ProductMapper.toResponse(franchise, id, request.name(), request.stock()));
+        ).map(franchise -> extractCreatedProduct(franchise, id, request))
+         .map(ProductMapper::toResponse);
+    }
+
+    private Branch extractBranch(Franchise franchise, String branchId) {
+        return franchise.getBranches().stream()
+                .filter(branch -> branch.getId().equals(branchId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Branch not found"));
+    }
+
+    private Product extractCreatedProduct(Franchise franchise, String branchId, ProductRequest request) {
+        return franchise.getBranches().stream()
+                .filter(branch -> branch.getId().equals(branchId))
+                .findFirst()
+                .flatMap(branch -> branch.getProducts().stream()
+                        .filter(product -> product.getName().equals(request.name())
+                                && product.getStock() == request.stock())
+                        .findFirst()
+                )
+                .orElseThrow(() -> new IllegalArgumentException("Created product not found"));
     }
 }

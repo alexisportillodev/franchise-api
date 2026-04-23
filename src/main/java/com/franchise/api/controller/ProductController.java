@@ -7,15 +7,10 @@ import com.franchise.api.mapper.ProductMapper;
 import com.franchise.application.usecase.product.RemoveProductFromBranchUseCase;
 import com.franchise.application.usecase.product.UpdateProductNameUseCase;
 import com.franchise.application.usecase.product.UpdateProductStockUseCase;
+import com.franchise.domain.model.Franchise;
+import com.franchise.domain.model.Product;
 import jakarta.validation.Valid;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.ResponseStatus;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
 
 @RestController
@@ -35,11 +30,12 @@ public class ProductController {
     }
 
     @DeleteMapping("/{id}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public Mono<Void> removeProduct(@PathVariable String id) {
+    public Mono<ProductResponse> removeProduct(@PathVariable String id) {
         return removeProductFromBranchUseCase.execute(
                 new RemoveProductFromBranchUseCase.RemoveProductFromBranchRequest(id)
-        ).then();
+        )
+        .map(franchise -> extractProduct(franchise, id))
+        .map(ProductMapper::toResponse);
     }
 
     @PutMapping("/{id}/stock")
@@ -47,7 +43,9 @@ public class ProductController {
                                                     @Valid @RequestBody UpdateProductStockRequest request) {
         return updateProductStockUseCase.execute(
                 new UpdateProductStockUseCase.UpdateProductStockRequest(id, request.stock())
-        ).map(franchise -> ProductMapper.toResponse(franchise, id));
+        )
+        .map(franchise -> extractProduct(franchise, id))
+        .map(ProductMapper::toResponse);
     }
 
     @PutMapping("/{id}/name")
@@ -55,6 +53,16 @@ public class ProductController {
                                                    @Valid @RequestBody UpdateProductNameRequest request) {
         return updateProductNameUseCase.execute(
                 new UpdateProductNameUseCase.UpdateProductNameRequest(id, request.name())
-        ).map(franchise -> ProductMapper.toResponse(franchise, id));
+        )
+        .map(franchise -> extractProduct(franchise, id))
+        .map(ProductMapper::toResponse);
+    }
+
+    private Product extractProduct(Franchise franchise, String productId) {
+        return franchise.getBranches().stream()
+                .flatMap(branch -> branch.getProducts().stream())
+                .filter(product -> product.getId().equals(productId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Product not found"));
     }
 }
