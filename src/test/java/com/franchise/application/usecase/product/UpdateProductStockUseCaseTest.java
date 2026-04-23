@@ -92,4 +92,25 @@ class UpdateProductStockUseCaseTest {
         verify(franchiseRepository, never()).findById(org.mockito.ArgumentMatchers.anyString());
         verify(franchiseRepository, never()).save(org.mockito.ArgumentMatchers.any());
     }
+
+    @Test
+    void givenLocatedProductButMissingFranchiseWhenExecuteThenReturnErrorAndDoNotSave() {
+        UpdateProductStockUseCase.UpdateProductStockRequest request =
+                new UpdateProductStockUseCase.UpdateProductStockRequest("pr-1", 25);
+
+        when(findProductLocationUseCase.execute(new FindProductLocationUseCase.FindProductLocationRequest("pr-1")))
+                .thenReturn(Mono.just(new FindProductLocationUseCase.ProductLocation("fr-missing", "br-1", "pr-1")));
+        when(franchiseRepository.findById("fr-missing")).thenReturn(Optional.empty());
+
+        StepVerifier.create(useCase.execute(request))
+                .expectErrorSatisfies(error -> {
+                    assertThat(error).isInstanceOf(IllegalArgumentException.class);
+                    assertThat(error).hasMessage("Franchise not found");
+                })
+                .verify();
+
+        verify(findProductLocationUseCase).execute(new FindProductLocationUseCase.FindProductLocationRequest("pr-1"));
+        verify(franchiseRepository).findById("fr-missing");
+        verify(franchiseRepository, never()).save(org.mockito.ArgumentMatchers.any());
+    }
 }
