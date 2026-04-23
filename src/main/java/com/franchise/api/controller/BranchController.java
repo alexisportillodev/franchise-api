@@ -2,8 +2,10 @@ package com.franchise.api.controller;
 
 import com.franchise.api.dto.request.ProductRequest;
 import com.franchise.api.dto.request.UpdateBranchNameRequest;
-import com.franchise.api.dto.response.FranchiseResponse;
-import com.franchise.api.mapper.FranchiseMapper;
+import com.franchise.api.dto.response.BranchResponse;
+import com.franchise.api.dto.response.ProductResponse;
+import com.franchise.api.mapper.BranchMapper;
+import com.franchise.api.mapper.ProductMapper;
 import com.franchise.application.usecase.branch.UpdateBranchNameUseCase;
 import com.franchise.application.usecase.product.AddProductToBranchUseCase;
 import jakarta.validation.Valid;
@@ -31,19 +33,19 @@ public class BranchController {
     }
 
     @PutMapping("/{id}")
-    public Mono<FranchiseResponse> updateBranchName(@PathVariable String id,
-                                                    @Valid @RequestBody UpdateBranchNameRequest request) {
+    public Mono<BranchResponse> updateBranchName(@PathVariable String id,
+                                                 @Valid @RequestBody UpdateBranchNameRequest request) {
         return updateBranchNameUseCase.execute(
                 new UpdateBranchNameUseCase.UpdateBranchNameRequest(id, request.name())
-        ).map(FranchiseMapper::toResponse);
+        ).map(franchise -> BranchMapper.toResponse(franchise, id));
     }
 
     @PostMapping("/{id}/products")
     @ResponseStatus(HttpStatus.CREATED)
-    public Mono<FranchiseResponse> addProductToBranch(@PathVariable String id,
-                                                      @Valid @RequestBody ProductRequest request) {
+    public Mono<ProductResponse> addProductToBranch(@PathVariable String id,
+                                                    @Valid @RequestBody ProductRequest request) {
         return addProductToBranchUseCase.execute(
                 new AddProductToBranchUseCase.AddProductToBranchRequest(id, request.name(), request.stock())
-        ).map(FranchiseMapper::toResponse);
+        ).map(franchise -> ProductMapper.toResponse(franchise, id, request.name(), request.stock()));
     }
 }

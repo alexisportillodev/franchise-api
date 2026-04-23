@@ -2,8 +2,8 @@ package com.franchise.api.controller;
 
 import com.franchise.api.dto.request.UpdateProductNameRequest;
 import com.franchise.api.dto.request.UpdateProductStockRequest;
-import com.franchise.api.dto.response.FranchiseResponse;
-import com.franchise.api.mapper.FranchiseMapper;
+import com.franchise.api.dto.response.ProductResponse;
+import com.franchise.api.mapper.ProductMapper;
 import com.franchise.application.usecase.product.RemoveProductFromBranchUseCase;
 import com.franchise.application.usecase.product.UpdateProductNameUseCase;
 import com.franchise.application.usecase.product.UpdateProductStockUseCase;
@@ -43,18 +43,18 @@ public class ProductController {
     }
 
     @PutMapping("/{id}/stock")
-    public Mono<FranchiseResponse> updateProductStock(@PathVariable String id,
-                                                      @Valid @RequestBody UpdateProductStockRequest request) {
+    public Mono<ProductResponse> updateProductStock(@PathVariable String id,
+                                                    @Valid @RequestBody UpdateProductStockRequest request) {
         return updateProductStockUseCase.execute(
                 new UpdateProductStockUseCase.UpdateProductStockRequest(id, request.stock())
-        ).map(FranchiseMapper::toResponse);
+        ).map(franchise -> ProductMapper.toResponse(franchise, id));
     }
 
     @PutMapping("/{id}/name")
-    public Mono<FranchiseResponse> updateProductName(@PathVariable String id,
-                                                     @Valid @RequestBody UpdateProductNameRequest request) {
+    public Mono<ProductResponse> updateProductName(@PathVariable String id,
+                                                   @Valid @RequestBody UpdateProductNameRequest request) {
         return updateProductNameUseCase.execute(
                 new UpdateProductNameUseCase.UpdateProductNameRequest(id, request.name())
-        ).map(FranchiseMapper::toResponse);
+        ).map(franchise -> ProductMapper.toResponse(franchise, id));
     }
 }
