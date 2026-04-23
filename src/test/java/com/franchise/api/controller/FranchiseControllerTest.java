@@ -126,4 +126,20 @@ class FranchiseControllerTest {
                 .expectBody()
                 .jsonPath("$.message").isEqualTo("Franchise not found");
     }
+
+    @Test
+    @DisplayName("PUT /franchises/{id} should return 400 for invalid payload")
+    void shouldReturnBadRequestWhenUpdatingFranchiseWithInvalidPayload() {
+        webTestClient.put()
+                .uri("/franchises/{id}", "fr-1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("""
+                        {"name":""}
+                        """)
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectHeader().contentTypeCompatibleWith(MediaType.APPLICATION_JSON)
+                .expectBody()
+                .jsonPath("$.message").isEqualTo("Name is required");
+    }
 }

@@ -150,6 +150,44 @@ class ProductControllerTest {
                 .jsonPath("$.message").isEqualTo("Product not found");
     }
 
+    @Test
+    @DisplayName("PUT /products/{id}/stock should return 404 when product does not exist")
+    void shouldReturnNotFoundWhenUpdatingStockForMissingProduct() {
+        when(updateProductStockUseCase.execute(any()))
+                .thenReturn(Mono.error(new IllegalArgumentException("Product not found")));
+
+        webTestClient.put()
+                .uri("/products/{id}/stock", "missing")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("""
+                        {"stock":10}
+                        """)
+                .exchange()
+                .expectStatus().isNotFound()
+                .expectHeader().contentTypeCompatibleWith(MediaType.APPLICATION_JSON)
+                .expectBody()
+                .jsonPath("$.message").isEqualTo("Product not found");
+    }
+
+    @Test
+    @DisplayName("PUT /products/{id}/name should return 404 when product does not exist")
+    void shouldReturnNotFoundWhenUpdatingNameForMissingProduct() {
+        when(updateProductNameUseCase.execute(any()))
+                .thenReturn(Mono.error(new IllegalArgumentException("Product not found")));
+
+        webTestClient.put()
+                .uri("/products/{id}/name", "missing")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("""
+                        {"name":"Laptop Pro"}
+                        """)
+                .exchange()
+                .expectStatus().isNotFound()
+                .expectHeader().contentTypeCompatibleWith(MediaType.APPLICATION_JSON)
+                .expectBody()
+                .jsonPath("$.message").isEqualTo("Product not found");
+    }
+
     private Franchise franchiseWithProduct(String productId, String productName, int stock) {
         Product product = Product.builder()
                 .id(productId)

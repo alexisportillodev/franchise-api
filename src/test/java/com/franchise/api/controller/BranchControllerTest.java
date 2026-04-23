@@ -140,4 +140,39 @@ class BranchControllerTest {
                 .expectBody()
                 .jsonPath("$.message").isEqualTo("Branch not found");
     }
+
+    @Test
+    @DisplayName("PUT /branches/{id} should return 400 for invalid payload")
+    void shouldReturnBadRequestWhenUpdatingBranchWithInvalidPayload() {
+        webTestClient.put()
+                .uri("/branches/{id}", "br-1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("""
+                        {"name":""}
+                        """)
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectHeader().contentTypeCompatibleWith(MediaType.APPLICATION_JSON)
+                .expectBody()
+                .jsonPath("$.message").isEqualTo("Name is required");
+    }
+
+    @Test
+    @DisplayName("POST /branches/{id}/products should return 404 when branch does not exist")
+    void shouldReturnNotFoundWhenAddingProductToMissingBranch() {
+        when(addProductToBranchUseCase.execute(any()))
+                .thenReturn(Mono.error(new IllegalArgumentException("Branch not found")));
+
+        webTestClient.post()
+                .uri("/branches/{id}/products", "missing")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("""
+                        {"name":"Laptop","stock":15}
+                        """)
+                .exchange()
+                .expectStatus().isNotFound()
+                .expectHeader().contentTypeCompatibleWith(MediaType.APPLICATION_JSON)
+                .expectBody()
+                .jsonPath("$.message").isEqualTo("Branch not found");
+    }
 }
