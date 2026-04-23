@@ -1,10 +1,11 @@
-package com.franchise.application.usecase;
+package com.franchise.application.usecase.franchise;
 
 import com.franchise.domain.model.Franchise;
 import com.franchise.domain.port.in.FranchiseRepository;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
+import java.util.UUID;
 
 public class CreateFranchiseUseCase {
 
@@ -15,16 +16,13 @@ public class CreateFranchiseUseCase {
     }
 
     public Mono<Franchise> execute(CreateFranchiseRequest request) {
-        Franchise franchise = Franchise.builder()
-                .id(generateId())
-                .name(request.name())
-                .branches(List.of())
-                .build();
-        return Mono.fromCallable(() -> franchiseRepository.save(franchise));
-    }
-
-    private String generateId() {
-        return java.util.UUID.randomUUID().toString();
+        return Mono.fromSupplier(() -> franchiseRepository.save(
+                Franchise.builder()
+                        .id(UUID.randomUUID().toString())
+                        .name(request.name())
+                        .branches(List.of())
+                        .build()
+        ));
     }
 
     public record CreateFranchiseRequest(String name) {}
