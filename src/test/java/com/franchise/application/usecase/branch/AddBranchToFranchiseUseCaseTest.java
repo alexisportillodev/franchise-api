@@ -30,10 +30,15 @@ class AddBranchToFranchiseUseCaseTest {
 
     @Test
     void givenExistingFranchiseWhenExecuteThenAddBranch() {
+        Branch existingBranch = Branch.builder()
+                .id("br-existing")
+                .name("Sucursal Centro")
+                .products(List.of())
+                .build();
         Franchise franchise = Franchise.builder()
                 .id("fr-1")
                 .name("Franquicia")
-                .branches(List.of())
+                .branches(List.of(existingBranch))
                 .build();
         AddBranchToFranchiseUseCase.AddBranchToFranchiseRequest request =
                 new AddBranchToFranchiseUseCase.AddBranchToFranchiseRequest("fr-1", "Sucursal Norte");
@@ -44,8 +49,9 @@ class AddBranchToFranchiseUseCaseTest {
 
         StepVerifier.create(useCase.execute(request))
                 .assertNext(updatedFranchise -> {
-                    assertThat(updatedFranchise.getBranches()).hasSize(1);
-                    Branch branch = updatedFranchise.getBranches().getFirst();
+                    assertThat(updatedFranchise.getBranches()).hasSize(2);
+                    assertThat(updatedFranchise.getBranches().getFirst().getId()).isEqualTo("br-existing");
+                    Branch branch = updatedFranchise.getBranches().getLast();
                     assertThat(branch.getName()).isEqualTo("Sucursal Norte");
                     assertThat(branch.getProducts()).isEmpty();
                     assertThat(branch.getId()).isNotBlank();
@@ -55,8 +61,9 @@ class AddBranchToFranchiseUseCaseTest {
         verify(franchiseRepository).findById("fr-1");
         ArgumentCaptor<Franchise> captor = ArgumentCaptor.forClass(Franchise.class);
         verify(franchiseRepository).save(captor.capture());
-        assertThat(captor.getValue().getBranches()).hasSize(1);
-        assertThat(captor.getValue().getBranches().getFirst().getName()).isEqualTo("Sucursal Norte");
+        assertThat(captor.getValue().getBranches()).hasSize(2);
+        assertThat(captor.getValue().getBranches().getFirst().getId()).isEqualTo("br-existing");
+        assertThat(captor.getValue().getBranches().getLast().getName()).isEqualTo("Sucursal Norte");
     }
 
     @Test

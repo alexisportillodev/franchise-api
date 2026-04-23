@@ -47,4 +47,22 @@ class CreateFranchiseUseCaseTest {
         assertThat(savedFranchise.getBranches()).isEmpty();
         assertThat(savedFranchise.getId()).isNotBlank();
     }
+
+    @Test
+    void givenRepositoryFailureWhenExecuteThenPropagateError() {
+        CreateFranchiseUseCase.CreateFranchiseRequest request =
+                new CreateFranchiseUseCase.CreateFranchiseRequest("Franquicia Centro");
+
+        when(franchiseRepository.save(org.mockito.ArgumentMatchers.any(Franchise.class)))
+                .thenThrow(new IllegalStateException("Save failed"));
+
+        StepVerifier.create(useCase.execute(request))
+                .expectErrorSatisfies(error -> {
+                    assertThat(error).isInstanceOf(IllegalStateException.class);
+                    assertThat(error).hasMessage("Save failed");
+                })
+                .verify();
+
+        verify(franchiseRepository).save(org.mockito.ArgumentMatchers.any(Franchise.class));
+    }
 }

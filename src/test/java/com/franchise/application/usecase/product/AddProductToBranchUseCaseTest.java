@@ -36,10 +36,15 @@ class AddProductToBranchUseCaseTest {
 
     @Test
     void givenExistingBranchWhenExecuteThenAddProduct() {
+        Product existingProduct = Product.builder()
+                .id("pr-existing")
+                .name("Mouse")
+                .stock(5)
+                .build();
         Branch branch = Branch.builder()
                 .id("br-1")
                 .name("Sucursal Norte")
-                .products(List.of())
+                .products(List.of(existingProduct))
                 .build();
         Franchise franchise = Franchise.builder()
                 .id("fr-1")
@@ -57,7 +62,9 @@ class AddProductToBranchUseCaseTest {
 
         StepVerifier.create(useCase.execute(request))
                 .assertNext(updatedFranchise -> {
-                    Product product = updatedFranchise.getBranches().getFirst().getProducts().getFirst();
+                    assertThat(updatedFranchise.getBranches().getFirst().getProducts()).hasSize(2);
+                    assertThat(updatedFranchise.getBranches().getFirst().getProducts().getFirst().getId()).isEqualTo("pr-existing");
+                    Product product = updatedFranchise.getBranches().getFirst().getProducts().getLast();
                     assertThat(product.getName()).isEqualTo("Laptop");
                     assertThat(product.getStock()).isEqualTo(15);
                     assertThat(product.getId()).isNotBlank();
@@ -67,7 +74,29 @@ class AddProductToBranchUseCaseTest {
         verify(franchiseRepository).findById("fr-1");
         ArgumentCaptor<Franchise> captor = ArgumentCaptor.forClass(Franchise.class);
         verify(franchiseRepository).save(captor.capture());
-        assertThat(captor.getValue().getBranches().getFirst().getProducts()).hasSize(1);
+        assertThat(captor.getValue().getBranches().getFirst().getProducts()).hasSize(2);
+        assertThat(captor.getValue().getBranches().getFirst().getProducts().getFirst().getId()).isEqualTo("pr-existing");
+    }
+
+    @Test
+    void givenLocatedBranchButMissingFranchiseWhenExecuteThenReturnErrorAndDoNotSave() {
+        AddProductToBranchUseCase.AddProductToBranchRequest request =
+                new AddProductToBranchUseCase.AddProductToBranchRequest("br-1", "Laptop", 15);
+
+        when(findBranchLocationUseCase.execute(new FindBranchLocationUseCase.FindBranchLocationRequest("br-1")))
+                .thenReturn(Mono.just(new FindBranchLocationUseCase.BranchLocation("fr-missing", "br-1")));
+        when(franchiseRepository.findById("fr-missing")).thenReturn(Optional.empty());
+
+        StepVerifier.create(useCase.execute(request))
+                .expectErrorSatisfies(error -> {
+                    assertThat(error).isInstanceOf(IllegalArgumentException.class);
+                    assertThat(error).hasMessage("Franchise not found");
+                })
+                .verify();
+
+        verify(findBranchLocationUseCase).execute(new FindBranchLocationUseCase.FindBranchLocationRequest("br-1"));
+        verify(franchiseRepository).findById("fr-missing");
+        verify(franchiseRepository, never()).save(org.mockito.ArgumentMatchers.any());
     }
 
     @Test
