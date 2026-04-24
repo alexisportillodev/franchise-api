@@ -1,0 +1,15 @@
+services:
+
+  franchise-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: franchise-api
+    ports:
+      - "8080:8080"
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_REGION: us-east-2
+      AWS_DYNAMODB_TABLE_NAME: franchise
+      # Sin AWS_ENDPOINT_OVERRIDE → apunta a AWS real automáticamente

@@ -53,6 +53,29 @@ logs/
 ### AWS ###
 .aws/
 
+### Terraform ###
+# Local .terraform directory (downloaded providers/modules)
+**/.terraform/*
+# Terraform state files (may contain sensitive data)
+*.tfstate
+*.tfstate.*
+# Terraform variable override files
+*.tfvars
+*.tfvars.json
+# Terraform crash log
+crash.log
+crash.*.log
+# Terraform plan output (may contain secrets)
+*.tfplan
+# Override files (local developer overrides)
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+# Terraform CLI config
+.terraformrc
+terraform.rc
+
 ### Spring local config ###
 application-local.yml
 application-local.properties
