@@ -8,6 +8,8 @@ import com.franchise.infrastructure.persistence.dynamodb.DynamoDbRepositoryExcep
 import com.franchise.infrastructure.persistence.dynamodb.mapper.BranchMapper;
 import com.franchise.infrastructure.persistence.dynamodb.mapper.FranchiseMapper;
 import com.franchise.infrastructure.persistence.dynamodb.mapper.ProductMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Repository;
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
@@ -33,6 +35,7 @@ import static com.franchise.infrastructure.persistence.dynamodb.mapper.DynamoDbK
 import static com.franchise.infrastructure.persistence.dynamodb.mapper.DynamoDbKeys.FRANCHISE_PK_PREFIX;
 import static com.franchise.infrastructure.persistence.dynamodb.mapper.DynamoDbKeys.branchSk;
 import static com.franchise.infrastructure.persistence.dynamodb.mapper.DynamoDbKeys.franchisePk;
+import static com.franchise.infrastructure.persistence.dynamodb.mapper.DynamoDbKeys.franchiseSk;
 import static com.franchise.infrastructure.persistence.dynamodb.mapper.DynamoDbKeys.productPk;
 import static com.franchise.infrastructure.persistence.dynamodb.mapper.DynamoDbKeys.productSk;
 
@@ -47,11 +50,11 @@ import static com.franchise.infrastructure.persistence.dynamodb.mapper.DynamoDbK
  * intentionally blocking; callers must invoke this repository from a
  * {@code Mono.fromCallable(...).subscribeOn(Schedulers.boundedElastic())}
  * context to avoid blocking the Netty event loop.</p>
- *
- * <p>Requirements: 3.1–3.11</p>
  */
 @Repository
 public class FranchiseDynamoDbRepository implements FranchiseRepository {
+
+    private static final Logger log = LoggerFactory.getLogger(FranchiseDynamoDbRepository.class);
 
     private static final String GSI_SK_PK = "GSI_SK_PK";
 
@@ -74,9 +77,7 @@ public class FranchiseDynamoDbRepository implements FranchiseRepository {
         this.productMapper   = productMapper;
         this.tableName       = dynamoDbTableName;
 
-        System.out.println(">>> [REPOSITORY] INIT");
-        System.out.println(">>> TABLE NAME INJECTED: " + this.tableName);
-        System.out.println(">>> CLIENT: " + dynamoDbClient.getClass().getName());
+        log.info("FranchiseDynamoDbRepository initialized — table={}", this.tableName);
     }
 
     // -------------------------------------------------------------------------
@@ -94,10 +95,8 @@ public class FranchiseDynamoDbRepository implements FranchiseRepository {
     public Franchise save(Franchise franchise) {
         List<TransactWriteItem> writeItems = new ArrayList<>();
 
-        // Put franchise item
         writeItems.add(putItem(franchiseMapper.toItem(franchise)));
 
-        // Put each branch item and its products
         for (Branch branch : franchise.getBranches()) {
             writeItems.add(putItem(branchMapper.toItem(franchise.getId(), branch)));
             for (Product product : branch.getProducts()) {
@@ -111,6 +110,7 @@ public class FranchiseDynamoDbRepository implements FranchiseRepository {
 
         try {
             dynamoDbClient.transactWriteItems(request).join();
+            log.debug("Saved franchise id={}", franchise.getId());
         } catch (CompletionException e) {
             throw new DynamoDbRepositoryException("DynamoDB operation failed", e.getCause());
         }
@@ -125,39 +125,31 @@ public class FranchiseDynamoDbRepository implements FranchiseRepository {
      * @return an {@link Optional} containing the franchise, or empty if not found
      */
     @Override
-public Optional<Franchise> findById(String id) {
+    public Optional<Franchise> findById(String id) {
+        log.debug("findById — id={}", id);
 
-    System.out.println(">>> [findById] START");
-    System.out.println(">>> TABLE: " + tableName);
-    System.out.println(">>> ID: " + id);
+        QueryRequest request = QueryRequest.builder()
+                .tableName(tableName)
+                .keyConditionExpression("PK = :pk")
+                .expressionAttributeValues(Map.of(
+                        ":pk", AttributeValue.builder().s(franchisePk(id)).build()
+                ))
+                .build();
 
-    QueryRequest request = QueryRequest.builder()
-            .tableName(tableName)
-            .keyConditionExpression("PK = :pk")
-            .expressionAttributeValues(Map.of(
-                    ":pk", AttributeValue.builder().s(franchisePk(id)).build()
-            ))
-            .build();
+        try {
+            QueryResponse response = dynamoDbClient.query(request).join();
 
-    try {
-        System.out.println(">>> EXECUTING QUERY findById");
-        QueryResponse response = dynamoDbClient.query(request).join();
+            if (!response.hasItems() || response.items().isEmpty()) {
+                log.debug("findById — no items found for id={}", id);
+                return Optional.empty();
+            }
 
-        System.out.println(">>> RESPONSE ITEMS: " + response.items().size());
+            return reconstructFranchise(id, response.items());
 
-        if (!response.hasItems() || response.items().isEmpty()) {
-            System.out.println(">>> NO ITEMS FOUND");
-            return Optional.empty();
+        } catch (CompletionException e) {
+            throw new DynamoDbRepositoryException("DynamoDB operation failed", e.getCause());
         }
-
-        return reconstructFranchise(id, response.items());
-
-    } catch (CompletionException e) {
-        System.err.println(">>> ERROR in findById TABLE=" + tableName);
-        e.printStackTrace();
-        throw new DynamoDbRepositoryException("DynamoDB operation failed", e.getCause());
     }
-}
 
     /**
      * Returns all franchises, each fully reconstructed with nested branches and products.
@@ -165,78 +157,77 @@ public Optional<Franchise> findById(String id) {
      * @return list of all franchises
      */
     @Override
-public List<Franchise> findAll() {
+    public List<Franchise> findAll() {
+        log.debug("findAll — scanning table={}", tableName);
 
-    System.out.println(">>> [findAll] START TABLE: " + tableName);
+        ScanRequest request = ScanRequest.builder()
+                .tableName(tableName)
+                .filterExpression("entityType = :type")
+                .expressionAttributeValues(Map.of(
+                        ":type", AttributeValue.builder().s("FRANCHISE").build()
+                ))
+                .build();
 
-    ScanRequest request = ScanRequest.builder()
-            .tableName(tableName)
-            .filterExpression("entityType = :type")
-            .expressionAttributeValues(Map.of(
-                    ":type", AttributeValue.builder().s("FRANCHISE").build()
-            ))
-            .build();
+        try {
+            ScanResponse response = dynamoDbClient.scan(request).join();
 
-    try {
-        ScanResponse response = dynamoDbClient.scan(request).join();
+            if (!response.hasItems()) {
+                return Collections.emptyList();
+            }
 
-        System.out.println(">>> SCAN ITEMS: " + response.items().size());
+            return response.items().stream()
+                    .map(item -> item.get("id").s())
+                    .map(this::findById)
+                    .filter(Optional::isPresent)
+                    .map(Optional::get)
+                    .collect(Collectors.toList());
 
-        if (!response.hasItems()) {
-            return Collections.emptyList();
+        } catch (CompletionException e) {
+            throw new DynamoDbRepositoryException("DynamoDB operation failed", e.getCause());
         }
-
-        return response.items().stream()
-                .map(item -> item.get("id").s())
-                .map(this::findById)
-                .filter(Optional::isPresent)
-                .map(Optional::get)
-                .collect(Collectors.toList());
-
-    } catch (CompletionException e) {
-        System.err.println(">>> ERROR in findAll TABLE=" + tableName);
-        e.printStackTrace();
-        throw new DynamoDbRepositoryException("DynamoDB operation failed", e.getCause());
     }
-}
 
     /**
-     * Deletes a franchise and all its associated branches and products.
+     * Deletes a franchise and all its associated branches and products atomically.
      *
      * @param id the franchise ID to delete
      */
     @Override
-public void deleteById(String id) {
+    public void deleteById(String id) {
+        log.debug("deleteById — id={}", id);
 
-    System.out.println(">>> [deleteById] START ID=" + id);
-    System.out.println(">>> TABLE=" + tableName);
-
-    QueryRequest franchiseQuery = QueryRequest.builder()
-            .tableName(tableName)
-            .keyConditionExpression("PK = :pk")
-            .expressionAttributeValues(Map.of(
-                    ":pk", AttributeValue.builder().s(franchisePk(id)).build()
-            ))
-            .build();
-
-    try {
-        QueryResponse response = dynamoDbClient.query(franchiseQuery).join();
-
-        System.out.println(">>> DELETE QUERY ITEMS: " + response.items().size());
-
-        if (response.items().isEmpty()) {
-            System.out.println(">>> NOTHING TO DELETE");
+        // Load the full franchise to know which branches and products to delete
+        Optional<Franchise> franchiseOpt = findById(id);
+        if (franchiseOpt.isEmpty()) {
+            log.debug("deleteById — franchise not found, nothing to delete id={}", id);
             return;
         }
 
-        // resto igual...
+        Franchise franchise = franchiseOpt.get();
+        List<TransactWriteItem> deleteItems = new ArrayList<>();
 
-    } catch (CompletionException e) {
-        System.err.println(">>> ERROR in deleteById TABLE=" + tableName);
-        e.printStackTrace();
-        throw new DynamoDbRepositoryException("DynamoDB operation failed", e.getCause());
+        // Delete franchise item
+        deleteItems.add(deleteItem(franchisePk(id), franchiseSk(id)));
+
+        // Delete each branch item and its products
+        for (Branch branch : franchise.getBranches()) {
+            deleteItems.add(deleteItem(franchisePk(id), branchSk(branch.getId())));
+            for (Product product : branch.getProducts()) {
+                deleteItems.add(deleteItem(productPk(branch.getId()), productSk(product.getId())));
+            }
+        }
+
+        TransactWriteItemsRequest request = TransactWriteItemsRequest.builder()
+                .transactItems(deleteItems)
+                .build();
+
+        try {
+            dynamoDbClient.transactWriteItems(request).join();
+            log.debug("Deleted franchise id={}", id);
+        } catch (CompletionException e) {
+            throw new DynamoDbRepositoryException("DynamoDB operation failed", e.getCause());
+        }
     }
-}
 
     /**
      * Finds the franchise that owns a given branch via the GSI.

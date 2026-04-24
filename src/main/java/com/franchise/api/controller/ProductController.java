@@ -30,12 +30,11 @@ public class ProductController {
     }
 
     @DeleteMapping("/{id}")
-    public Mono<ProductResponse> removeProduct(@PathVariable String id) {
+    @org.springframework.web.bind.annotation.ResponseStatus(org.springframework.http.HttpStatus.NO_CONTENT)
+    public Mono<Void> removeProduct(@PathVariable String id) {
         return removeProductFromBranchUseCase.execute(
                 new RemoveProductFromBranchUseCase.RemoveProductFromBranchRequest(id)
-        )
-        .map(franchise -> extractProduct(franchise, id))
-        .map(ProductMapper::toResponse);
+        ).then();
     }
 
     @PutMapping("/{id}/stock")

@@ -8,9 +8,12 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * In-memory implementation of {@link FranchiseRepository}.
+ * Intended for local development and testing only — not for production use.
+ */
 public class FranchiseRepositoryImpl implements FranchiseRepository {
 
-    // SimulaciÃ³n in-memory para ejemplo (en producciÃ³n, usar DynamoDB con Reactor)
     private final ConcurrentHashMap<String, Franchise> store = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, String> branchToFranchiseIndex = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, ProductLocation> productIndex = new ConcurrentHashMap<>();
@@ -37,7 +40,6 @@ public class FranchiseRepositoryImpl implements FranchiseRepository {
         if (previous != null) {
             deindex(previous);
         }
-
         index(franchise);
         return franchise;
     }
@@ -72,7 +74,4 @@ public class FranchiseRepositoryImpl implements FranchiseRepository {
             branch.getProducts().forEach(product -> productIndex.remove(product.getId()));
         });
     }
-
-    // Nota: En implementaciÃ³n real con DynamoDB, usar Mono.fromFuture para operaciones asÃ­ncronas
-    // Ejemplo: Mono.fromFuture(dynamoDbClient.getItem(request)).map(response -> mapToFranchise(response))
 }
