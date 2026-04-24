@@ -12,7 +12,8 @@ API REST reactiva para la gestión de franquicias, sucursales y productos. Const
 - [Modelos de dominio](#modelos-de-dominio)
 - [Endpoints](#endpoints)
 - [Requisitos previos](#requisitos-previos)
-- [Ejecución local](#ejecución-local)
+- [Ejecución con Docker (recomendado)](#ejecución-con-docker-recomendado)
+- [Ejecución local sin Docker](#ejecución-local-sin-docker)
 - [Ejemplos de uso](#ejemplos-de-uso)
 - [Manejo de errores](#manejo-de-errores)
 - [Estructura del proyecto](#estructura-del-proyecto)
@@ -34,18 +35,17 @@ Las operaciones principales son:
 
 ## Stack tecnológico
 
-| Componente        | Tecnología                          |
-|-------------------|-------------------------------------|
-| Lenguaje          | Java 21                             |
-| Framework         | Spring Boot 3.5.13                  |
-| Modelo reactivo   | Spring WebFlux (Reactor / Netty)    |
-| Build tool        | Gradle (Kotlin DSL)                 |
-| Reducción boilerplate | Lombok                          |
-| Validación        | Jakarta Bean Validation             |
-| Testing           | JUnit 5, Mockito, Reactor Test      |
-| Persistencia      | In-memory (`ConcurrentHashMap`)     |
-
-> La capa de persistencia está diseñada para ser reemplazada por AWS DynamoDB sin modificar la lógica de negocio.
+| Componente            | Tecnología                          |
+|-----------------------|-------------------------------------|
+| Lenguaje              | Java 21                             |
+| Framework             | Spring Boot 3.5.13                  |
+| Modelo reactivo       | Spring WebFlux (Reactor / Netty)    |
+| Build tool            | Gradle (Kotlin DSL)                 |
+| Reducción boilerplate | Lombok                              |
+| Validación            | Jakarta Bean Validation             |
+| Base de datos         | AWS DynamoDB / DynamoDB Local       |
+| Testing               | JUnit 5, Mockito, Reactor Test      |
+| Contenedores          | Docker + Docker Compose             |
 
 ---
 
@@ -125,32 +125,96 @@ Franchise
 
 ## Requisitos previos
 
-Antes de ejecutar el proyecto asegúrate de tener instalado:
+### Para ejecutar con Docker (recomendado)
+
+- **Docker Desktop** — [Descargar](https://www.docker.com/products/docker-desktop/)
+- **Git**
+
+No se necesita Java ni Gradle instalados localmente; el build ocurre dentro del contenedor.
+
+### Para ejecutar sin Docker
 
 - **Java 21** — [Descargar](https://adoptium.net/)
-- **Git** — para clonar el repositorio
+- **Git**
 
-No es necesario instalar Gradle; el proyecto incluye el wrapper `gradlew`.
+---
 
-Verifica tu versión de Java:
+## Ejecución con Docker (recomendado)
+
+Este es el método más sencillo. Levanta dos contenedores:
+
+| Contenedor      | Imagen                          | Puerto |
+|-----------------|---------------------------------|--------|
+| `dynamodb-local`| `amazon/dynamodb-local:2.5.2`   | 8000   |
+| `franchise-api` | Construida desde el `Dockerfile`| 8080   |
+
+Un tercer contenedor (`dynamodb-init`) crea la tabla `franchise` automáticamente al iniciar y luego se detiene.
+
+### Paso 1 — Clonar el repositorio
 
 ```bash
-java -version
-# java version "21.x.x" ...
+git clone https://github.com/alexisportillodev/franchise-api.git
+cd franchise-api
+```
+
+### Paso 2 — Construir y levantar los contenedores
+
+```bash
+docker compose up --build
+```
+
+> La primera vez tarda unos minutos porque descarga las imágenes base y compila el JAR dentro del contenedor. Las siguientes ejecuciones son mucho más rápidas gracias al caché de capas.
+
+Cuando veas esta línea en los logs, la API está lista:
+
+```
+franchise-api  | Started FranchiseApiApplication in X.XXX seconds
+```
+
+### Paso 3 — Verificar que todo está corriendo
+
+```bash
+docker compose ps
+```
+
+Deberías ver `dynamodb-local` y `franchise-api` con estado `running`.
+
+### Paso 4 — Probar la API
+
+```bash
+curl -X POST http://localhost:8080/franchises \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Mi Franquicia"}'
+```
+
+### Detener los contenedores
+
+```bash
+docker compose down
+```
+
+> Los datos se pierden al detener porque DynamoDB Local corre en modo `inMemory`. Esto es intencional para el entorno de desarrollo.
+
+### Reconstruir la imagen después de cambios en el código
+
+```bash
+docker compose up --build
 ```
 
 ---
 
-## Ejecución local
+## Ejecución local sin Docker
 
-### 1. Clonar el repositorio
+Usa este método si prefieres correr la aplicación directamente con Gradle. En este modo la persistencia es **in-memory** (no requiere DynamoDB).
+
+### Paso 1 — Clonar el repositorio
 
 ```bash
 git clone <url-del-repositorio>
 cd franchise-api
 ```
 
-### 2. Compilar el proyecto
+### Paso 2 — Compilar el proyecto
 
 ```bash
 # Linux / macOS
@@ -160,7 +224,7 @@ cd franchise-api
 gradlew.bat build
 ```
 
-### 3. Ejecutar la aplicación
+### Paso 3 — Ejecutar la aplicación
 
 ```bash
 # Linux / macOS
@@ -172,7 +236,7 @@ gradlew.bat bootRun
 
 La aplicación arranca en `http://localhost:8080`.
 
-### 4. Ejecutar los tests
+### Paso 4 — Ejecutar los tests
 
 ```bash
 # Linux / macOS
@@ -182,25 +246,12 @@ La aplicación arranca en `http://localhost:8080`.
 gradlew.bat test
 ```
 
-### 5. Generar el JAR y ejecutarlo directamente
+### Generar y ejecutar el JAR directamente
 
 ```bash
-# Compilar y empaquetar
 ./gradlew bootJar
-
-# Ejecutar el JAR generado
 java -jar build/libs/franchise-api-0.0.1-SNAPSHOT.jar
 ```
-
-### Perfil local (opcional)
-
-El archivo `src/main/resources/application-local.properties` contiene configuración para conectar con una instancia local de DynamoDB (por ejemplo, LocalStack). Para activarlo:
-
-```bash
-./gradlew bootRun --args='--spring.profiles.active=local'
-```
-
-> Sin este perfil, la aplicación usa almacenamiento en memoria y no requiere ninguna dependencia externa.
 
 ---
 
@@ -295,7 +346,7 @@ curl -X PUT http://localhost:8080/branches/branch-uuid-001 \
 {
   "id": "branch-uuid-001",
   "name": "Sucursal Norte",
-  "products": [...]
+  "products": []
 }
 ```
 
@@ -386,46 +437,51 @@ curl -X POST http://localhost:8080/branches/branch-001/products \
 ## Estructura del proyecto
 
 ```
-src/
-└── main/
-    └── java/com/franchise/
-        ├── FranchiseApiApplication.java
+franchise-api/
+├── Dockerfile
+├── docker-compose.yml
+├── build.gradle.kts
+│
+└── src/
+    └── main/
+        ├── resources/
+        │   ├── application.properties
+        │   └── application-local.properties   # Perfil Docker / DynamoDB Local
         │
-        ├── api/                          # Capa de presentación
-        │   ├── controller/
-        │   │   ├── FranchiseController.java
-        │   │   ├── BranchController.java
-        │   │   └── ProductController.java
-        │   ├── dto/
-        │   │   ├── request/              # FranchiseRequest, BranchRequest, ProductRequest, ...
-        │   │   └── response/             # FranchiseResponse, BranchResponse, ProductResponse, ...
-        │   ├── handler/
-        │   │   └── ApiExceptionHandler.java
-        │   └── mapper/
-        │       ├── FranchiseMapper.java
-        │       ├── BranchMapper.java
-        │       ├── ProductMapper.java
-        │       └── TopProductMapper.java
-        │
-        ├── application/                  # Capa de aplicación
-        │   └── usecase/
-        │       ├── franchise/            # CreateFranchiseUseCase, UpdateFranchiseNameUseCase
-        │       ├── branch/               # AddBranchToFranchiseUseCase, UpdateBranchNameUseCase, ...
-        │       ├── product/              # AddProductToBranchUseCase, RemoveProductFromBranchUseCase, ...
-        │       └── query/                # GetTopStockProductPerBranchUseCase
-        │
-        ├── domain/                       # Capa de dominio (sin dependencias externas)
-        │   ├── model/
-        │   │   ├── Franchise.java
-        │   │   ├── Branch.java
-        │   │   └── Product.java
-        │   └── port/in/
-        │       └── FranchiseRepository.java
-        │
-        ├── infrastructure/               # Capa de infraestructura
-        │   └── persistence/
-        │       └── FranchiseRepositoryImpl.java
-        │
-        └── config/
-            └── BeanConfig.java           # Wiring manual de dependencias
+        └── java/com/franchise/
+            ├── FranchiseApiApplication.java
+            │
+            ├── api/                            # Capa de presentación
+            │   ├── controller/
+            │   │   ├── FranchiseController.java
+            │   │   ├── BranchController.java
+            │   │   └── ProductController.java
+            │   ├── dto/
+            │   │   ├── request/
+            │   │   └── response/
+            │   ├── handler/
+            │   │   └── ApiExceptionHandler.java
+            │   └── mapper/
+            │
+            ├── application/                    # Capa de aplicación
+            │   └── usecase/
+            │       ├── franchise/
+            │       ├── branch/
+            │       ├── product/
+            │       └── query/
+            │
+            ├── domain/                         # Capa de dominio (sin dependencias externas)
+            │   ├── model/
+            │   │   ├── Franchise.java
+            │   │   ├── Branch.java
+            │   │   └── Product.java
+            │   └── port/in/
+            │       └── FranchiseRepository.java
+            │
+            ├── infrastructure/                 # Capa de infraestructura
+            │   └── persistence/
+            │       └── FranchiseRepositoryImpl.java
+            │
+            └── config/
+                └── BeanConfig.java
 ```
