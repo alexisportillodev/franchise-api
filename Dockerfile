@@ -1,47 +1,31 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# Stage 1: Build — assemble the fat JAR using Gradle
-# ─────────────────────────────────────────────────────────────────────────────
+# ── Stage 1: Build ──────────────────────────────────────────────────────────
 FROM eclipse-temurin:21-jdk-alpine AS builder
 
 WORKDIR /app
 
-# Copy Gradle wrapper and build descriptor files first to cache the dependency
-# download layer separately from the source code.
-COPY gradlew gradlew.bat settings.gradle.kts build.gradle.kts ./
-COPY gradle ./gradle
+# Copy Gradle wrapper and dependency descriptors first (layer cache)
+COPY gradlew gradlew.bat ./
+COPY gradle/ gradle/
+COPY build.gradle.kts settings.gradle.kts ./
 
-# Download dependencies (cached as a separate layer)
-RUN ./gradlew dependencies --no-daemon
+# Download dependencies (cached unless build files change)
+RUN chmod +x gradlew && ./gradlew dependencies --no-daemon -q
 
-# Copy source and build the fat JAR
-COPY src ./src
-RUN ./gradlew bootJar --no-daemon
+# Copy source and build the JAR
+COPY src/ src/
+RUN ./gradlew bootJar --no-daemon -x test
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Stage 2: Runtime — minimal JRE image with a non-root user
-# ─────────────────────────────────────────────────────────────────────────────
-FROM eclipse-temurin:21-jre-alpine AS runtime
-
-# Create a non-root group and user for security hardening
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+# ── Stage 2: Runtime ─────────────────────────────────────────────────────────
+FROM eclipse-temurin:21-jre-alpine
 
 WORKDIR /app
 
-# Copy the fat JAR from the builder stage
-COPY --from=builder /app/build/libs/*.jar app.jar
-
-# Run as non-root user
+# Non-root user for security
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 USER appuser
 
-# Expose the application HTTP port
+COPY --from=builder /app/build/libs/franchise-api-*.jar app.jar
+
 EXPOSE 8080
 
-# Runtime environment variables — injected at container start time.
-# Do NOT embed real credentials in this file or any image layer.
-ENV AWS_REGION=""
-ENV AWS_ACCESS_KEY_ID=""
-ENV AWS_SECRET_ACCESS_KEY=""
-ENV DYNAMODB_TABLE_NAME=""
-
-# Launch the application directly (no shell wrapper)
 ENTRYPOINT ["java", "-jar", "app.jar"]
