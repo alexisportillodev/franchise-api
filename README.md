@@ -1,6 +1,6 @@
 # Franchise API
 
-API REST reactiva para la gestión de franquicias, sucursales y productos. Construida con **Spring Boot WebFlux** siguiendo los principios de **Clean Architecture**.
+API REST reactiva para la gestión de franquicias, sucursales y productos. Construida con **Spring Boot WebFlux** siguiendo los principios de **Clean Architecture**, con persistencia en **AWS DynamoDB**.
 
 ---
 
@@ -12,8 +12,9 @@ API REST reactiva para la gestión de franquicias, sucursales y productos. Const
 - [Modelos de dominio](#modelos-de-dominio)
 - [Endpoints](#endpoints)
 - [Requisitos previos](#requisitos-previos)
-- [Ejecución con Docker (recomendado)](#ejecución-con-docker-recomendado)
-- [Ejecución local sin Docker](#ejecución-local-sin-docker)
+- [Opción 1 — Local con Docker (DynamoDB Local)](#opción-1--local-con-docker-dynamodb-local)
+- [Opción 2 — AWS con Terraform + Docker](#opción-2--aws-con-terraform--docker)
+- [Opción 3 — Local sin Docker (en memoria)](#opción-3--local-sin-docker-en-memoria)
 - [Ejemplos de uso](#ejemplos-de-uso)
 - [Manejo de errores](#manejo-de-errores)
 - [Estructura del proyecto](#estructura-del-proyecto)
@@ -44,6 +45,7 @@ Las operaciones principales son:
 | Reducción boilerplate | Lombok                              |
 | Validación            | Jakarta Bean Validation             |
 | Base de datos         | AWS DynamoDB / DynamoDB Local       |
+| Infraestructura       | Terraform                           |
 | Testing               | JUnit 5, Mockito, Reactor Test      |
 | Contenedores          | Docker + Docker Compose             |
 
@@ -125,30 +127,40 @@ Franchise
 
 ## Requisitos previos
 
-### Para ejecutar con Docker (recomendado)
+### Todas las opciones requieren
+
+- **Git**
+
+### Opción 1 — Local con Docker
 
 - **Docker Desktop** — [Descargar](https://www.docker.com/products/docker-desktop/)
-- **Git**
 
 No se necesita Java ni Gradle instalados localmente; el build ocurre dentro del contenedor.
 
-### Para ejecutar sin Docker
+### Opción 2 — AWS con Terraform + Docker
+
+- **Docker Desktop** — [Descargar](https://www.docker.com/products/docker-desktop/)
+- **Terraform CLI ≥ 1.5** — [Descargar](https://developer.hashicorp.com/terraform/install)
+- **Cuenta de AWS** con un usuario IAM que tenga el permiso `AmazonDynamoDBFullAccess`
+- **Credenciales AWS** configuradas (mediante `aws configure` o variables de entorno)
+
+### Opción 3 — Local sin Docker
 
 - **Java 21** — [Descargar](https://adoptium.net/)
-- **Git**
 
 ---
 
-## Ejecución con Docker (recomendado)
+## Opción 1 — Local con Docker (DynamoDB Local)
 
-Este es el método más sencillo. Levanta dos contenedores:
+La forma más sencilla de ejecutar el proyecto. Levanta tres contenedores:
 
-| Contenedor      | Imagen                          | Puerto |
-|-----------------|---------------------------------|--------|
-| `dynamodb-local`| `amazon/dynamodb-local:2.5.2`   | 8000   |
-| `franchise-api` | Construida desde el `Dockerfile`| 8080   |
+| Contenedor       | Imagen                          | Puerto |
+|------------------|---------------------------------|--------|
+| `dynamodb-local` | `amazon/dynamodb-local:2.5.2`   | 8000   |
+| `dynamodb-init`  | `amazon/aws-cli:2.15.30`        | —      |
+| `franchise-api`  | Construida desde el `Dockerfile`| 8080   |
 
-Un tercer contenedor (`dynamodb-init`) crea la tabla `franchise` automáticamente al iniciar y luego se detiene.
+`dynamodb-init` crea la tabla `franchise` automáticamente al iniciar y luego se detiene.
 
 ### Paso 1 — Clonar el repositorio
 
@@ -195,22 +207,125 @@ docker compose down
 
 > Los datos se pierden al detener porque DynamoDB Local corre en modo `inMemory`. Esto es intencional para el entorno de desarrollo.
 
-### Reconstruir la imagen después de cambios en el código
-
-```bash
-docker compose up --build
-```
-
 ---
 
-## Ejecución local sin Docker
+## Opción 2 — AWS con Terraform + Docker
 
-Usa este método si prefieres correr la aplicación directamente con Gradle. En este modo la persistencia es **in-memory** (no requiere DynamoDB).
+Usa esta opción para ejecutar la aplicación conectada a una tabla DynamoDB real en AWS. Terraform se encarga de aprovisionar la infraestructura necesaria.
 
 ### Paso 1 — Clonar el repositorio
 
 ```bash
-git clone <url-del-repositorio>
+git clone https://github.com/alexisportillodev/franchise-api.git
+cd franchise-api
+```
+
+### Paso 2 — Configurar las credenciales de AWS
+
+Asegúrate de tener las credenciales disponibles en el entorno. La forma más directa:
+
+```bash
+# Linux / macOS
+export AWS_ACCESS_KEY_ID=tu-access-key
+export AWS_SECRET_ACCESS_KEY=tu-secret-key
+
+# Windows (PowerShell)
+$env:AWS_ACCESS_KEY_ID="tu-access-key"
+$env:AWS_SECRET_ACCESS_KEY="tu-secret-key"
+```
+
+O de forma permanente con el CLI de AWS:
+
+```bash
+aws configure
+```
+
+### Paso 3 — Aprovisionar la tabla DynamoDB con Terraform
+
+```bash
+cd terraform
+terraform init                # descarga el provider de AWS
+terraform plan                # previsualiza los recursos que se crearán
+terraform apply               # escribe "yes" para confirmar
+```
+
+Al finalizar `apply`, Terraform imprime el nombre y ARN de la tabla:
+
+```
+table_name = "franchise"
+table_arn  = "arn:aws:dynamodb:us-east-2:123456789012:table/franchise"
+```
+
+> **Región:** por defecto usa `us-east-2`. Para cambiarla, pasa `-var="aws_region=us-east-1"` al comando `terraform apply`.
+
+> **¿Qué crea Terraform?** Una tabla DynamoDB con clave compuesta `PK` / `SK`, un índice secundario global `GSI_SK_PK` y modo de facturación `PAY_PER_REQUEST`. No crea usuarios IAM ni credenciales; usa las que ya configuraste en el paso anterior.
+
+### Paso 4 — Configurar el archivo de entorno
+
+Copia el archivo de ejemplo y completa tus credenciales:
+
+```bash
+cp .env.example .env
+```
+
+Edita `.env`:
+
+```env
+AWS_ACCESS_KEY_ID=tu-access-key
+AWS_SECRET_ACCESS_KEY=tu-secret-key
+```
+
+> `.env` está en el `.gitignore`. Nunca lo subas al repositorio.
+
+### Paso 5 — Construir y levantar el contenedor
+
+```bash
+docker compose -f docker-compose.aws.yml up --build
+```
+
+El contenedor lee `AWS_ACCESS_KEY_ID` y `AWS_SECRET_ACCESS_KEY` desde `.env` y se conecta directamente a DynamoDB en AWS (sin endpoint local).
+
+Cuando veas esta línea, la API está lista:
+
+```
+franchise-api  | Started FranchiseApiApplication in X.XXX seconds
+```
+
+### Paso 6 — Probar la API
+
+```bash
+curl -X POST http://localhost:8080/franchises \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Mi Franquicia"}'
+```
+
+### Detener el contenedor
+
+```bash
+docker compose -f docker-compose.aws.yml down
+```
+
+> Los datos persisten en DynamoDB en AWS aunque el contenedor se detenga.
+
+### Destruir la infraestructura en AWS (cuando ya no se necesite)
+
+```bash
+cd terraform
+terraform destroy             # escribe "yes" para confirmar
+```
+
+Esto elimina la tabla DynamoDB y todos los recursos creados por Terraform.
+
+---
+
+## Opción 3 — Local sin Docker (en memoria)
+
+Usa esta opción para desarrollo rápido o ejecución de tests. No requiere DynamoDB; la persistencia es en memoria.
+
+### Paso 1 — Clonar el repositorio
+
+```bash
+git clone https://github.com/alexisportillodev/franchise-api.git
 cd franchise-api
 ```
 
@@ -439,8 +554,15 @@ curl -X POST http://localhost:8080/branches/branch-001/products \
 ```
 franchise-api/
 ├── Dockerfile
-├── docker-compose.yml
+├── docker-compose.yml            # Local — DynamoDB Local
+├── docker-compose.aws.yml        # AWS — DynamoDB real
 ├── build.gradle.kts
+│
+├── terraform/                    # Infraestructura como código
+│   ├── main.tf                   # Tabla DynamoDB + configuración del provider
+│   ├── variables.tf              # aws_region, table_name
+│   ├── outputs.tf                # table_name, table_arn
+│   └── .terraform.lock.hcl      # Lock de versión del provider
 │
 └── src/
     └── main/
@@ -453,14 +575,10 @@ franchise-api/
             │
             ├── api/                            # Capa de presentación
             │   ├── controller/
-            │   │   ├── FranchiseController.java
-            │   │   ├── BranchController.java
-            │   │   └── ProductController.java
             │   ├── dto/
             │   │   ├── request/
             │   │   └── response/
             │   ├── handler/
-            │   │   └── ApiExceptionHandler.java
             │   └── mapper/
             │
             ├── application/                    # Capa de aplicación
@@ -472,16 +590,11 @@ franchise-api/
             │
             ├── domain/                         # Capa de dominio (sin dependencias externas)
             │   ├── model/
-            │   │   ├── Franchise.java
-            │   │   ├── Branch.java
-            │   │   └── Product.java
             │   └── port/in/
-            │       └── FranchiseRepository.java
             │
             ├── infrastructure/                 # Capa de infraestructura
             │   └── persistence/
-            │       └── FranchiseRepositoryImpl.java
+            │       └── dynamodb/
             │
             └── config/
-                └── BeanConfig.java
 ```
