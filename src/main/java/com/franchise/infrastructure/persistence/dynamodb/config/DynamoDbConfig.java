@@ -1,5 +1,7 @@
 package com.franchise.infrastructure.persistence.dynamodb.config;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -14,6 +16,8 @@ import java.net.URI;
 @Configuration
 public class DynamoDbConfig {
 
+    private static final Logger log = LoggerFactory.getLogger(DynamoDbConfig.class);
+
     @Value("${aws.region:us-east-2}")
     private String awsRegion;
 
@@ -25,16 +29,13 @@ public class DynamoDbConfig {
 
     @Bean
     public DynamoDbAsyncClient dynamoDbAsyncClient() {
-
-        System.out.println(">>> [DYNAMO CONFIG] INIT CLIENT");
-        System.out.println(">>> REGION: " + awsRegion);
-        System.out.println(">>> ENDPOINT OVERRIDE: " + endpointOverride);
+        log.info("Initializing DynamoDB async client — region={}", awsRegion);
 
         DynamoDbAsyncClientBuilder builder = DynamoDbAsyncClient.builder()
                 .region(Region.of(awsRegion));
 
         if (StringUtils.hasText(endpointOverride)) {
-            System.out.println(">>> USING CUSTOM ENDPOINT: " + endpointOverride);
+            log.info("Using custom DynamoDB endpoint: {}", endpointOverride);
             builder.endpointOverride(URI.create(endpointOverride));
         }
 
@@ -43,7 +44,6 @@ public class DynamoDbConfig {
 
     @Bean
     public DynamoDbEnhancedAsyncClient dynamoDbEnhancedAsyncClient(DynamoDbAsyncClient client) {
-        System.out.println(">>> [DYNAMO CONFIG] ENHANCED CLIENT CREATED");
         return DynamoDbEnhancedAsyncClient.builder()
                 .dynamoDbClient(client)
                 .build();
@@ -51,7 +51,7 @@ public class DynamoDbConfig {
 
     @Bean
     public String dynamoDbTableName() {
-        System.out.println(">>> [DYNAMO CONFIG] TABLE NAME BEAN = " + tableName);
+        log.info("DynamoDB table name: {}", tableName);
         return tableName;
     }
 }
