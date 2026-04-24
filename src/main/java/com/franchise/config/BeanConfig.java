@@ -12,7 +12,7 @@ import com.franchise.application.usecase.product.UpdateProductNameUseCase;
 import com.franchise.application.usecase.product.UpdateProductStockUseCase;
 import com.franchise.application.usecase.query.GetTopStockProductPerBranchUseCase;
 import com.franchise.domain.port.in.FranchiseRepository;
-import com.franchise.infrastructure.persistence.FranchiseRepositoryImpl;
+import com.franchise.infrastructure.persistence.dynamodb.repository.FranchiseDynamoDbRepository;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -20,8 +20,8 @@ import org.springframework.context.annotation.Configuration;
 public class BeanConfig {
 
     @Bean
-    public FranchiseRepository franchiseRepository() {
-        return new FranchiseRepositoryImpl();
+    public FranchiseRepository franchiseRepository(FranchiseDynamoDbRepository repo) {
+        return repo;
     }
 
     @Bean
